@@ -83,7 +83,7 @@ end
 function QuickApp:fetchQAData(user,repo,name)
   self:getQAReleases(user,repo,name,function(ok,data)
     if ok then
-      dir[name].releases = json.decode(data)
+      dir[name].info = json.decode(data)
     else
       self:error(fmt("fetching repo %s:%s:%s", user, repo, name))
     end
@@ -93,8 +93,9 @@ end
 
 function QuickApp:updateDistsMenu()
   local options = {}
-  for name,qa in pairs(dir) do
-    table.insert(options,{text=name,type='option',value=name})
+  for name,info in pairs(dir) do
+    local text = fmt("%s %s",name,info.info and info.info.version or "")
+    table.insert(options,{text=text,type='option',value=name})
   end
   self:updateView("qaSelect","options",options)
 

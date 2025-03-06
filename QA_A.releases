@@ -1,8 +1,14 @@
-[
-  {
-  "tag": "FirstTag",
-  "version": "1.0",
-  "description": "Release description goes here",
-  "date": "2023-10-03"
+{
+  "uid": "5345879375",
+  "description": "This is a test QA A",
+  "author": "j@g.com",
+  "versions":
+  [
+    {
+      "tag": "FirstTag",
+      "version": "1.0",
+      "description": "A Release description goes here",
+      "date": "2023-10-03"
+    }
+  ]
 }
-]
