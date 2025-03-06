@@ -20,6 +20,9 @@ local EVENT = fibaro.EVENT or {}
 fibaro.EVENT = EVENT
 
 local dir = {}
+local selectedDist = nil
+local selectedVersion = nil
+local selectedUpdateQA = nil
 
 local function urlencode(str) -- very useful
   if str then
@@ -86,8 +89,8 @@ function QuickApp:onInit()
     fibaro.hc3emu.loadQA("test/QA_A.lua")
     fibaro.hc3emu.loadQA("test/QA_B.lua")
   end
-
   self:updateQADir()
+  self:updateQAlist()
 end
 
 function QuickApp:updateQADir()
@@ -95,6 +98,20 @@ function QuickApp:updateQADir()
     dir[qa.name] = qa
     self:fetchQAData(qa.user,qa.repo,qa.name)
   end
+end
+
+function QuickApp:updateQAlist()
+  local options = {}
+  local qas = api.get("/devices?interface=quickApp")
+  for _,qa in ipairs(qas) do
+    if qa.parentId==nil or qa.parentId == 0 then
+      local name = fmt("%s:%s",qa.id,qa.name)
+      table.insert(options,{idx=qa.name,text=name,type='option',value=tostring(qa.id)})
+    end
+  end
+  table.sort(options,function(a,b) return a.idx < b.idx end)
+  table.map(options,function(o) o.idx = nil end)
+  self:updateView("qaUpdate","options",options)
 end
 
 function QuickApp:fetchQAData(user,repo,name)
@@ -112,9 +129,41 @@ function QuickApp:updateDistsMenu()
   local options = {}
   for name,info in pairs(dir) do
     info = info.info
-    local text = fmt("%s %s",name,info and info.description or "")
+    local text = fmt("%s, %s",trim(name),info and info.description or "")
     table.insert(options,{text=text,type='option',value=name})
   end
   self:updateView("qaSelect","options",options)
+end
 
+function QuickApp:updateVersionMenu()
+  local options = {}
+  local dist = dir[selectedDist]
+  if not dist then return end
+  local info = dist.info
+  local versions = info.versions
+  for i,v in ipairs(versions) do
+    local text = fmt("%s, %s",v.version,v.description)
+    table.insert(options,{text=text,type='option',value=v.version})
+  end
+  self:updateView("qaVersion","options",options)
+end
+
+function QuickApp:qaSelect(event)
+  local name = event.value
+  selectedDist = name
+  self:updateVersionMenu()
+end
+
+function QuickApp:qaVersion(event)
+  selectedVersion = event.value
+end
+
+function QuickApp:qaUpdate(event)
+  selectedUpdateQA = event.value
+end
+
+function QuickApp:update()
+end
+
+function QuickApp:install()
 end
