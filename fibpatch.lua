@@ -84,17 +84,18 @@ function QuickApp:fetchQAData(user,repo,name)
   self:getQAReleases(user,repo,name,function(ok,data)
     if ok then
       dir[name].info = json.decode(data)
+      self:updateDistsMenu()
     else
       self:error(fmt("fetching repo %s:%s:%s", user, repo, name))
     end
   end)
-  self:updateDistsMenu()
 end
 
 function QuickApp:updateDistsMenu()
   local options = {}
   for name,info in pairs(dir) do
-    local text = fmt("%s %s",name,info.info and info.info.version or "")
+    info = info.info
+    local text = fmt("%s %s",name,info and info.description or "")
     table.insert(options,{text=text,type='option',value=name})
   end
   self:updateView("qaSelect","options",options)
