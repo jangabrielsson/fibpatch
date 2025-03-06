@@ -21,8 +21,20 @@ fibaro.EVENT = EVENT
 
 local dir = {}
 
+local function urlencode(str) -- very useful
+  if str then
+    str = str:gsub("\n", "\r\n")
+    str = str:gsub("([ %-%_%.%~])", function(c)
+        return ("%%%02X"):format(string.byte(c))
+      end)
+    str = str:gsub(" ", "%%20")
+  end
+  return str	
+end
+
 function QuickApp:getQA(user,repo,name,tag,cb)
-  local url = fmt("https://raw.githubusercontent.com/%s/%s/%s/%s",user,repo,tag,name)
+  local url = urlencode(fmt("/%s/%s/%s/%s",user,repo,tag,name))
+  url = "https://raw.githubusercontent.com"..url
   net.HTTPClient():request(url,{
     options = {checkCertificate = false, timeout=20000},
     success = function(response)
@@ -34,10 +46,15 @@ function QuickApp:getQA(user,repo,name,tag,cb)
   })
 end
 
+local function trim(s)
+  return s:match("(.+)%.fqa$") or s
+end
+
 function QuickApp:getQAReleases(user,repo,name,cb)
-  local name = name:match("(.+)%.fqa") or name
+  name = trim(name)
   name = name..".releases"
-  local url = fmt("https://raw.githubusercontent.com/%s/%s/master/%s",user,repo,name)
+  local url = urlencode(fmt("/%s/%s/master/%s",user,repo,name))
+  url = "https://raw.githubusercontent.com"..url
   net.HTTPClient():request(url,{
     options = {checkCertificate = false, timeout=20000},
     success = function(response)
