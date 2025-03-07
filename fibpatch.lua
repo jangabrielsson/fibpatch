@@ -1,3 +1,4 @@
+_DEVELOP="../hc3emu"
 if require and not QuickApp then require('hc3emu') end
 
 --%%name=fibpatch
@@ -6,11 +7,12 @@ if require and not QuickApp then require('hc3emu') end
 --%%file=utils.lua:utils
 --%%file=dir.lua:dir
 
---%%u={label='tile',text=''}
---%%u={select='qaSelect', text='QA dist', onToggle='qaSelect', options={}}
---%%u={select='qaVersion', text='Version', onToggle='qaVersion', options={}}
---%%u={select='qaUpdate', text='Update', onToggle='qaUpdate', options={}}
---%%u={{button='b1', text='Update', onReleased='qaUpdate'},{button='b2', text='Install', onReleased='qaInstall'}}
+--%%u={label='title',text=''}
+--%%u={select='qaSelect', text='QA dist', onToggled='qaSelect', options={}}
+--%%u={select='qaVersion', text='Version', onToggled='qaVersion', options={}}
+--%%u={select='qaUpdate', text='Update', onToggled='qaUpdate', options={}}
+--%%u={label='info',text=''}
+--%%u={{button='b1', text='Update', onReleased='qaUpdate'},{button='b2', text='Install', onReleased='qaInstall'},{button='b3', text='Refresh', onReleased='refresh'}}
 
 local test = true
 local VERSION = "0.1.0"
@@ -18,152 +20,146 @@ local VERSION = "0.1.0"
 local fmt = string.format
 local EVENT = fibaro.EVENT or {}
 fibaro.EVENT = EVENT
-
-local dir = {}
-local selectedDist = nil
-local selectedVersion = nil
-local selectedUpdateQA = nil
-
-local function urlencode(str) -- very useful
-  if str then
-    str = str:gsub("\n", "\r\n")
-    str = str:gsub("([ %-%_%.%~])", function(c)
-        return ("%%%02X"):format(string.byte(c))
-      end)
-    str = str:gsub(" ", "%%20")
-  end
-  return str	
-end
-
-function QuickApp:getQA(user,repo,name,tag,cb)
-  local url = urlencode(fmt("/%s/%s/%s/%s",user,repo,tag,name))
-  url = "https://raw.githubusercontent.com"..url
-  net.HTTPClient():request(url,{
-    options = {checkCertificate = false, timeout=20000},
-    success = function(response)
-      if response and response.status == 200 then
-        cb(true,response.data)
-      else cb(false,response and response.status or "nil") end
-    end,
-    error = function(err) cb(false,err) end
-  })
-end
+QAs,Versions,Dists = QAs,Versions,Dists
 
 local function trim(s)
   return s:match("(.+)%.fqa$") or s
 end
 
-function QuickApp:getQAReleases(user,repo,name,cb)
-  name = trim(name)
-  name = name..".releases"
-  local url = urlencode(fmt("/%s/%s/master/%s",user,repo,name))
-  url = "https://raw.githubusercontent.com"..url
-  net.HTTPClient():request(url,{
-    options = {checkCertificate = false, timeout=20000},
-    success = function(response)
-      if response and response.status == 200 then
-        cb(true,response.data)
-      else cb(false,response and response.status or "nil") end
-    end,
-    error = function(err) cb(false,err) end
-  })
+local DistType = nil
+local QAS = {}
+
+class "Dists"(Selectable)
+function Dists:__init(qa) Selectable.__init(self,qa,"qaSelect","qaSelect") end
+function Dists:name(item) return trim(item.name) end
+function Dists:key(item) return item.name end
+function Dists:sort(a,b) return a.name < b.name end
+function Dists:selected(item)
+  DistUID = item.info.uid
+  self.qa.versions:update(item.info.versions)
+  self.qa.qas:update(QAS)
+  self.qa:updateInfo()
 end
 
-function QuickApp:getQATags(user,repo,cb)
-  local url = fmt("https://api.github.com/repos/%s/%s/tags",user,repo)
-  net.HTTPClient():request(url,{
-    options = {checkCertificate = false, timeout=20000},
-    success = function(response)
-      if response and response.status == 200 then
-        cb(true,response.data)
-      else cb(false,response and response.status or "nil") end
-    end,
-    error = function(err) cb(false,err) end
-  })
-end
+class "Versions"(Selectable)
+function Versions:__init(qa) Selectable.__init(self,qa,"qaVersion","qaVersion") end
+function Versions:name(item) return fmt("%s, %s",item.version,item.description) end
+function Versions:key(item) return item.version end
+function Versions:sort(a,b) return a.version < b.version end
+function Versions:selected(item) self.qa:updateInfo() end
+
+class "QAs"(Selectable)
+function QAs:__init(qa) Selectable.__init(self,qa,"qaUpdate","qaUpdate") end
+function QAs:name(item) return fmt("%s: %s",item.id,item.name) end
+function QAs:key(item) return item.id end
+function QAs:sort(a,b) return a.name < b.name end
+function QAs:filter(item) return item.properties.quickAppUuid == DistUID end
+function QAs:selected(item) self.qa:updateInfo() end
 
 function QuickApp:onInit()
   self:debug(self.name,self.id)
-  self:updateView("tile","text",fmt("FibPatch v%s",VERSION))
+  self:updateView("title","text",fmt("FibPatch v%s",VERSION))
   if test then 
     fibaro.hc3emu.loadQA("test/QA_A.lua")
     fibaro.hc3emu.loadQA("test/QA_B.lua")
   end
+
+  self.dists = Dists(self)
+  self.versions = Versions(self)
+  self.qas = QAs(self)
+
   self:updateQADir()
   self:updateQAlist()
 end
 
+local dir = {}
 function QuickApp:updateQADir()
+  dir = {}
   for i,qa in ipairs(QA_DIR) do
     dir[qa.name] = qa
-    self:fetchQAData(qa.user,qa.repo,qa.name)
+    self:getQAReleases(qa.user,qa.repo,qa.name)
   end
 end
 
-function QuickApp:updateQAlist()
-  local options = {}
-  local qas = api.get("/devices?interface=quickApp")
-  for _,qa in ipairs(qas) do
-    if qa.parentId==nil or qa.parentId == 0 then
-      local name = fmt("%s:%s",qa.id,qa.name)
-      table.insert(options,{idx=qa.name,text=name,type='option',value=tostring(qa.id)})
-    end
-  end
-  table.sort(options,function(a,b) return a.idx < b.idx end)
-  table.map(options,function(o) o.idx = nil end)
-  self:updateView("qaUpdate","options",options)
-end
-
-function QuickApp:fetchQAData(user,repo,name)
-  self:getQAReleases(user,repo,name,function(ok,data)
+function QuickApp:getQAReleases(user,repo,name)
+  self:git_getQAReleases(user,repo,name,function(ok,data)
     if ok then
       dir[name].info = json.decode(data)
-      self:updateDistsMenu()
+      self.dists:update(dir)  -- updated to call dists
     else
       self:error(fmt("fetching repo %s:%s:%s", user, repo, name))
     end
   end)
 end
 
-function QuickApp:updateDistsMenu()
-  local options = {}
-  for name,info in pairs(dir) do
-    info = info.info
-    local text = fmt("%s, %s",trim(name),info and info.description or "")
-    table.insert(options,{text=text,type='option',value=name})
+local qas = {}
+function QuickApp:updateQAlist()
+  local res = api.get("/devices?interface=quickApp") or {}
+  qas = {}
+  for _,d in ipairs(res) do
+    if 
+      (d.parentId==nil or d.parentId==0) and
+      (d.encrypted == nil or d.encrypted == false)
+    then
+      table.insert(qas,d)
+    end
   end
-  self:updateView("qaSelect","options",options)
+  QAS = qas
+  self.qas:update(qas)
 end
 
-function QuickApp:updateVersionMenu()
-  local options = {}
-  local dist = dir[selectedDist]
-  if not dist then return end
-  local info = dist.info
-  local versions = info.versions
-  for i,v in ipairs(versions) do
-    local text = fmt("%s, %s",v.version,v.description)
-    table.insert(options,{text=text,type='option',value=v.version})
+function QuickApp:updateInfo()
+  local str = fmt("QA:%s\nVersion:%s\nUpdate:%s"
+    ,self.dists.item and self.dists.item.name or "N/A"
+    ,self.versions.item and self.versions.item.version or "N/A"
+    ,self.qas.item and self.qas.item.name or "N/A"
+  )
+  local updb = self.dists.item and self.versions.item and self.qas.item and true or false
+  self:updateView("b1","visible",updb)
+  self:updateView("info","text",str)
+end
+
+function QuickApp:getQA(cb)
+  if not(self.dists.item and self.versions.item) then
+    return self:error("Please select dist, version to install")
   end
-  self:updateView("qaVersion","options",options)
-end
-
-function QuickApp:qaSelect(event)
-  local name = event.value
-  selectedDist = name
-  self:updateVersionMenu()
-end
-
-function QuickApp:qaVersion(event)
-  selectedVersion = event.value
-end
-
-function QuickApp:qaUpdate(event)
-  selectedUpdateQA = event.value
+  local dist = self.dists.item
+  local version = self.versions.item
+  local tag = version.tag
+  if not tag then 
+    return self:error(fmt("Version %s not found",version.version))
+  end
+  self:git_getQA(dist.user,dist.repo,dist.name,tag,function(ok,res)
+    local fqa = pcall(json.decode,res)
+    if ok and fqa then cb(true,fqa) else cb(false,res) end
+  end)
 end
 
 function QuickApp:update()
+  if not self.qas.item then
+    return self:error("Please select QA to update")
+  end
+  self:getQA(function(ok,res)
+    local fqa = json.decode(res)
+    local files = fqa.files
+    local props = fqa.initialProperties
+    local ifs = fqa.initialInterfaces
+  end)
 end
 
 function QuickApp:install()
+  self:getQA(function(ok,res)
+    local fqa = res
+    local res,code = api.post("/quickApp/",fqa)
+    if code < 203 then
+      self:log("Install success")
+      return
+    end
+    self:error("Install failed")
+  end)
+end
+
+function QuickApp:refresh()
+  self:updateQADir()
+  self:updateQAlist()
 end
