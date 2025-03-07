@@ -83,6 +83,7 @@ class 'Selectable'
 function Selectable:__init(qa,id,fun)
   self.id = id
   self.qa = qa
+  self.fun = fun
   setTimeout(function() -- Add handler when QA has started
     self.qa[fun] = function(_,event)
       self.value = tostring(event.values[1])
@@ -122,6 +123,8 @@ function Selectable:select(key)
     return fibaro.warning(__TAG,"Invalid key: "..key)
   end
   self:_updateList("selectedItem",key)
+  self.qa[self.fun](self.qa,{values={key}})
+  self:selected(self.map[key])
 end
 
 function Selectable:_updateList(prop,value)

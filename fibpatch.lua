@@ -26,7 +26,8 @@ local function trim(s)
   return s:match("(.+)%.fqa$") or s
 end
 
-local DistType = nil
+fibaro.hc3emu.installLocal = true
+
 local QAS = {}
 
 class "Dists"(Selectable)
@@ -63,13 +64,19 @@ function QuickApp:onInit()
     fibaro.hc3emu.loadQA("test/QA_A.lua")
     fibaro.hc3emu.loadQA("test/QA_B.lua")
   end
-
+  
   self.dists = Dists(self)
   self.versions = Versions(self)
   self.qas = QAs(self)
-
+  
   self:updateQADir()
   self:updateQAlist()
+  
+  setTimeout(function() 
+    self.dists:select("QA_A.fqa")
+    self.versions:select("10")
+    self:qaInstall()
+  end,1000)
 end
 
 local dir = {}
@@ -98,8 +105,8 @@ function QuickApp:updateQAlist()
   qas = {}
   for _,d in ipairs(res) do
     if 
-      (d.parentId==nil or d.parentId==0) and
-      (d.encrypted == nil or d.encrypted == false)
+    (d.parentId==nil or d.parentId==0) and
+    (d.encrypted == nil or d.encrypted == false)
     then
       table.insert(qas,d)
     end
@@ -110,13 +117,13 @@ end
 
 function QuickApp:updateInfo()
   local str = fmt("QA:%s\nVersion:%s\nUpdate:%s"
-    ,self.dists.item and self.dists.item.name or "N/A"
-    ,self.versions.item and self.versions.item.version or "N/A"
-    ,self.qas.item and self.qas.item.name or "N/A"
-  )
-  local updb = self.dists.item and self.versions.item and self.qas.item and true or false
-  self:updateView("b1","visible",updb)
-  self:updateView("info","text",str)
+  ,self.dists.item and self.dists.item.name or "N/A"
+  ,self.versions.item and self.versions.item.version or "N/A"
+  ,self.qas.item and self.qas.item.name or "N/A"
+)
+local updb = self.dists.item and self.versions.item and self.qas.item and true or false
+self:updateView("b1","visible",updb)
+self:updateView("info","text",str)
 end
 
 function QuickApp:getQA(cb)
@@ -130,8 +137,8 @@ function QuickApp:getQA(cb)
     return self:error(fmt("Version %s not found",version.version))
   end
   self:git_getQA(dist.user,dist.repo,dist.name,tag,function(ok,res)
-    local fqa = pcall(json.decode,res)
-    if ok and fqa then cb(true,fqa) else cb(false,res) end
+    if ok then ok,res = pcall(json.decode,res) end
+    cb(ok,res)
   end)
 end
 
@@ -147,7 +154,7 @@ function QuickApp:update()
   end)
 end
 
-function QuickApp:install()
+function QuickApp:qaInstall()
   self:getQA(function(ok,res)
     local fqa = res
     local res,code = api.post("/quickApp/",fqa)
