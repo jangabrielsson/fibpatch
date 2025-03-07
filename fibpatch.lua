@@ -170,3 +170,7 @@ function QuickApp:refresh()
   self:updateQADir()
   self:updateQAlist()
 end
+
+function QuickApp:log(fmt,...)
+  self:debug(fmt,...)
+end
