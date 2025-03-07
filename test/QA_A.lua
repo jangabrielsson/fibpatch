@@ -9,7 +9,7 @@
 --%%save=QA_A.fqa
 
 
-function QuickApp:onInit()
+function QuickApp:onInit() 
   self:debug(self.name,self.id)
-  print("A=",A)
+  print("A= ",A)
 end
