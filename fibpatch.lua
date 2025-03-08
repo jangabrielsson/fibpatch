@@ -163,9 +163,9 @@ function QuickApp:update()
   self:getQA(function(ok,res)
     if not ok then return self:error(res) end
     local eid = self.qas.item.id
-    local version = self.versions.item.version
+    local version = self.versions.item
     local function exclude(name)
-      for _,p in ipairs(version.exlude or {}) do
+      for _,p in ipairs(version.exclude or {}) do
         if name == p then return true end
       end 
     end
@@ -186,10 +186,14 @@ function QuickApp:update()
     for _,f in ipairs(efile) do emap[f.name] = f end
     for _,f in ipairs(nfile) do
       if not emap[f.name] then newFiles[#newFiles+1] = f 
-      else existingFiles[#existingFiles+1] = f end
+      else 
+        if not exclude(f.name) then existingFiles[#existingFiles+1] = f end
+      end
     end
     for _,f in ipairs(efile) do 
-      if not nmap[f.name] then deletedFiles[#deletedFiles+1] = f end
+      if not nmap[f.name] and not exclude(f.name) then 
+        deletedFiles[#deletedFiles+1] = f 
+      end
     end
     
     for _,f in ipairs(newFiles) do

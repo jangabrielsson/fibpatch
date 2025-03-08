@@ -84,15 +84,13 @@ function Selectable:__init(qa,id,fun)
   self.id = id
   self.qa = qa
   self.fun = fun
-  setTimeout(function() -- Add handler when QA has started
-    self.qa[fun] = function(_,event)
-      self.value = tostring(event.values[1])
-      self.item = self.map[self.value]
-      if self.selected then
-        self:selected(self.item)
-      end
+  self.qa[fun] = function(_,event)
+    self.value = tostring(event.values[1])
+    self.item = self.map[self.value]
+    if self.selected then
+      self:selected(self.item)
     end
-   end,0)
+  end
 end
 function Selectable:update(list)
   local r = {}
