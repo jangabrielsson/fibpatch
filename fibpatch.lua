@@ -164,11 +164,20 @@ function QuickApp:update()
     if not ok then return self:error(res) end
     local eid = self.qas.item.id
     local version = self.versions.item
+
     local function exclude(name)
       for _,p in ipairs(version.exclude or {}) do
-        if name == p then return true end
+        local pp = p:match("^p:(.*)$")
+        if pp then return name:match(pp) else return name == p end
       end 
     end
+
+    local function equalContent(f)
+      local res,code = api.get(fmt("/quickApp/%s/files/%s",eid,f.name))
+      if code > 202 then return false end
+      return res.content == f.content
+    end
+
     local fqa = res
     
     local nprops = fqa.initialProperties
@@ -187,7 +196,9 @@ function QuickApp:update()
     for _,f in ipairs(nfile) do
       if not emap[f.name] then newFiles[#newFiles+1] = f 
       else 
-        if not exclude(f.name) then existingFiles[#existingFiles+1] = f end
+        if not equalContent(f) and not exclude(f.name) then 
+          existingFiles[#existingFiles+1] = f 
+        end
       end
     end
     for _,f in ipairs(efile) do 
@@ -196,23 +207,34 @@ function QuickApp:update()
       end
     end
     
+    local restarted = false
     for _,f in ipairs(newFiles) do
+      self:log("Creating file %s",f.name)
       local res,code = api.post("/quickApp/"..eid.."/files",f)
       if code > 201 then ERRORF("Failed to create file %s",f.name) end
+      restarted = true
     end
     
-    local res,code = api.put("/quickApp/"..eid.."/files",existingFiles)
-    if code > 202 then 
-      ERRORF("Failed to update files for QuickApp %d",eid)
+    if next(existingFiles) then
+      for _,f in ipairs(existingFiles) do
+        self:log("Updating file %s",f.name)
+      end
+      local res,code = api.put("/quickApp/"..eid.."/files",existingFiles)
+      if code > 202 then ERRORF("Failed to update files for QuickApp %d",eid) end
+      restarted = true
     end
     
     for _,f in ipairs(deletedFiles) do
+      self:log("Deleting file %s",f.name)
       local _,code = api.delete("/quickApp/"..eid.."/files/"..f.name)
       if code > 202 then ERRORF("Failed to delete file %s",f.name) end
+      restarted = true
     end
     
     -- Update UI
-    if UI then
+    local delay = restarted and 3 or 0
+    local function updateUI()
+      self:log("Updating UI")
       local viewLayout,uiView,uiCallbacks = nprops.viewLayout,nprops.uiView,nprops.uiCallbacks
       local _,code = api.put("/devices/"..eid,{
         properties = {
@@ -225,6 +247,8 @@ function QuickApp:update()
         ERRORF("Failed to update UI for QuickApp %d",eid)
       end
     end
+    if delay > 0 then self:log("Waiting %ss to update UI...",delay) end
+    setTimeout(updateUI, 1000*delay) -- Wait for QA to start
   end)
 end
 
@@ -246,5 +270,5 @@ function QuickApp:refresh()
 end
 
 function QuickApp:log(fmt,...)
-  self:debug(fmt,...)
+  self:debug(fmt:format(...))
 end
