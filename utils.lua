@@ -33,6 +33,18 @@ local function trim(s)
   return s:match("(.+)%.fqa$") or s
 end
 
+function QuickApp:getLibraryFile(url,cb)
+  net.HTTPClient():request(url,{
+    options = {checkCertificate = false, timeout=20000},
+    success = function(response)
+      if response and response.status < 204 then
+        cb(true,response.data)
+      else cb(false,response and response.status or "nil") end
+    end,
+    error = function(err) cb(false,err) end
+  })
+end
+
 function QuickApp:git_getQA(user,repo,name,tag,cb)
   local url = urlencode(fmt("/%s/%s/%s/%s",user,repo,tag,name))
   url = "https://raw.githubusercontent.com"..url
@@ -85,6 +97,9 @@ function Selectable:__init(qa,id,fun)
   self.qa = qa
   self.fun = fun
   self.qa[fun] = function(_,event)
+    if self.map == nil then
+      return fibaro.warning(__TAG,"Selectable "..self.id.." not initialized")
+    end
     self.value = tostring(event.values[1])
     self.item = self.map[self.value]
     if self.selected then

@@ -4,6 +4,7 @@ if require and not QuickApp then require('hc3emu') end
 --%%name=fibpatch
 --%%type=com.fibaro.genericDevice
 --%%proxy=FibPatchProxy
+--%%save=FibPatch.fqa
 --%%file=utils.lua:utils
 --%%file=dir.lua:dir
 
@@ -14,7 +15,7 @@ if require and not QuickApp then require('hc3emu') end
 --%%u={label='info',text=''}
 --%%u={{button='b1', text='Update', onReleased='update'},{button='b2', text='Install', onReleased='install'},{button='b3', text='Refresh', onReleased='refresh'}}
 
-local test = true
+local test = fibaro.hc3emu ~= nil
 local VERSION = "0.1.0"
 
 local fmt = string.format
@@ -28,7 +29,7 @@ local function trim(s)
   return s:match("(.+)%.fqa$") or s
 end
 
-fibaro.hc3emu.installLocal = true
+if test then fibaro.hc3emu.installLocal = true end
 
 local QAS = {}
 
@@ -71,13 +72,15 @@ function QuickApp:onInit()
   self.versions = Versions(self)
   self.qas = QAs(self)
   
-  self:updateQADir()
+  self:updateDistInfo()
   self:updateQAlist()
   
+  if test then 
   -- self:testQA("install","QA_A.fqa","1.0",nil,2000)
   -- self:testQA("install","QA_A.fqa","1.1",nil,4000)
   
-  self:testQA("update","QA_A.fqa","1.0",5002,2000)
+    self:testQA("update","QA_A.fqa","1.0",5002,4000)
+  end
 end
 
 function QuickApp:testQA(cmd,name,version,id,time) -- for testing in emulator
@@ -93,23 +96,47 @@ function QuickApp:testQA(cmd,name,version,id,time) -- for testing in emulator
 end
 
 local dir = {}
+local function addDist(dist)
+  local stat,res = pcall(function()
+  local key = dist.user..dist.repo..dist.name
+    dir[key] = dist
+  end)
+  local stat2,res2 = pcall(json.encode,dist)
+  res = stat2 and res2 or res
+  if not stat then ERRORF("Error adding dist %s",tostring(res)) end
+end
+
 function QuickApp:updateQADir()
-  dir = {}
-  for i,qa in ipairs(QA_DIR) do
-    dir[qa.name] = qa
-    self:getQAReleases(qa.user,qa.repo,qa.name)
+  local n = 0
+  for _,_ in pairs(dir) do n = n+1 end
+  for k,qa in pairs(dir) do 
+    local key,user,repo,name = k,qa.user,qa.repo,qa.name
+    self:git_getQAReleases(user,repo,name,function(ok,data)
+      n = n-1
+      if ok then 
+        dir[key].info = json.decode(data)
+        self:debug(fmt("Updated %s.%s.%s",user,repo,name))
+      else self:error(fmt("fetching repo %s:%s:%s", user, repo, name)) end
+      if n == 0 then self.dists:update(dir) end  -- updated to call dists
+    end)
   end
 end
 
-function QuickApp:getQAReleases(user,repo,name)
-  self:git_getQAReleases(user,repo,name,function(ok,data)
-    if ok then
-      dir[name].info = json.decode(data)
-      self.dists:update(dir)  -- updated to call dists
-    else
-      self:error(fmt("fetching repo %s:%s:%s", user, repo, name))
-    end
-  end)
+function QuickApp:updateDistInfo()
+  dir = {}
+  for _,dist in ipairs(QA_DIR or {}) do addDist(dist) end
+  local n = #QA_LIBRARIES
+  if n == 0 then return self:updateQADir() end
+  for _,url in ipairs(QA_LIBRARIES or {}) do
+    self:getLibraryFile(url,function(ok,lib)
+      n = n-1
+      if ok then
+        ok,lib = pcall(json.decode,lib)
+        if ok then for _,dist in ipairs(lib) do addDist(dist) end end
+      else self:error(fmt("fetching library %s",url)) end
+      if n == 0 then self:updateQADir() end
+    end)
+  end
 end
 
 local qas = {}
