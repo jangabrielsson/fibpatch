@@ -77,9 +77,9 @@ function QuickApp:onInit()
   
   if test then 
   -- self:testQA("install","QA_A.fqa","1.0",nil,2000)
-  -- self:testQA("install","QA_A.fqa","1.1",nil,4000)
+    self:testQA("install","QA_A.fqa","1.0",nil,2000)
   
-    self:testQA("update","QA_A.fqa","1.0",5002,4000)
+    self:testQA("update","QA_A.fqa","1.1",5002,6000)
   end
 end
 
@@ -271,8 +271,9 @@ function QuickApp:update()
         }
       })
       if code > 202 then 
-        ERRORF("Failed to update UI for QuickApp %d",eid)
+        return ERRORF("Failed to update UI for QuickApp %d",eid)
       end
+      self:log("Update success")
     end
     if delay > 0 then self:log("Waiting %ss to update UI...",delay) end
     setTimeout(updateUI, 1000*delay) -- Wait for QA to start
@@ -285,6 +286,7 @@ function QuickApp:install()
     local fqa = res
     local res,code = api.post("/quickApp/",fqa)
     if code < 203 then
+      self:updateQAlist()
       return self:log("Install success")
     end
     self:error("Install failed",code)
@@ -292,7 +294,7 @@ function QuickApp:install()
 end
 
 function QuickApp:refresh()
-  self:updateQADir()
+  self:updateDistInfo()
   self:updateQAlist()
 end
 
