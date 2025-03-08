@@ -10,10 +10,14 @@ if require and not QuickApp then require('hc3emu') end
 
 --%%u={label='title',text=''}
 --%%u={select='qaSelect', text='QA dist', onToggled='qaSelect', options={}}
+--%%u={label='qaAuthor',text=''}
+--%%u={label='qaDescr',text=''}
 --%%u={select='qaVersion', text='Version', onToggled='qaVersion', options={}}
+--%%u={label='vaDescr',text=''}
 --%%u={select='qaUpdate', text='Update', onToggled='qaUpdate', options={}}
 --%%u={label='info',text=''}
 --%%u={{button='b1', text='Update', onReleased='update'},{button='b2', text='Install', onReleased='install'},{button='b3', text='Refresh', onReleased='refresh'}}
+--%%u={label='log',text=''}
 
 local test = fibaro.hc3emu ~= nil
 local VERSION = "0.1.0"
@@ -64,8 +68,8 @@ function QuickApp:onInit()
   self:debug(self.name,self.id)
   self:updateView("title","text",fmt("FibPatch v%s",VERSION))
   if test then 
-    fibaro.hc3emu.loadQA("test/QA_A.lua")
-    fibaro.hc3emu.loadQA("test/QA_B.lua")
+    -- fibaro.hc3emu.loadQA("test/QA_A.lua")
+    -- fibaro.hc3emu.loadQA("test/QA_B.lua")
   end
   
   self.dists = Dists(self)
@@ -76,9 +80,9 @@ function QuickApp:onInit()
   self:updateQAlist()
   
   if test then 
-  -- self:testQA("install","QA_A.fqa","1.0",nil,2000)
+    -- self:testQA("install","QA_A.fqa","1.0",nil,2000)
     self:testQA("install","QA_A.fqa","1.0",nil,2000)
-  
+    
     self:testQA("update","QA_A.fqa","1.1",5002,6000)
   end
 end
@@ -98,7 +102,7 @@ end
 local dir = {}
 local function addDist(dist)
   local stat,res = pcall(function()
-  local key = dist.user..dist.repo..dist.name
+    local key = dist.user..dist.repo..dist.name
     dir[key] = dist
   end)
   local stat2,res2 = pcall(json.encode,dist)
@@ -115,7 +119,7 @@ function QuickApp:updateQADir()
       n = n-1
       if ok then 
         dir[key].info = json.decode(data)
-        self:debug(fmt("Updated %s.%s.%s",user,repo,name))
+        self:log("Updated %s.%s.%s",user,repo,name)
       else self:error(fmt("fetching repo %s:%s:%s", user, repo, name)) end
       if n == 0 then self.dists:update(dir) end  -- updated to call dists
     end)
@@ -156,14 +160,25 @@ function QuickApp:updateQAlist()
 end
 
 function QuickApp:updateInfo()
-  local str = fmt("QA:%s\nVersion:%s\nUpdate:%s"
-  ,self.dists.item and self.dists.item.name or "N/A"
-  ,self.versions.item and self.versions.item.version or "N/A"
-  ,self.qas.item and self.qas.item.name or "N/A"
-)
-local updb = self.dists.item and self.versions.item and self.qas.item and true or false
-self:updateView("b1","visible",updb)
-self:updateView("info","text",str)
+  if self.dists.item then
+    self:updateView("qaAuthor","text",self.dists.item.info.author or "")
+    self:updateView("qaDescr","text",self.dists.item.info.description or "")
+  else
+    self:updateView("qaAuthor","text","")
+    self:updateView("qaDescr","text","")
+  end
+  if self.versions.item then
+    self:updateView("vaDescr","text",self.versions.item.description or "")
+  else
+    self:updateView("vaDescr","text","")
+  end
+  local a = self.dists.item and self.dists.item.name or "N/A"
+  local b = self.versions.item and self.versions.item.version or "N/A"
+  local c = self.qas.item and self.qas.item.name or "N/A"
+  local str = fmt("QA:%s\nVersion:%s\nUpdate:%s",a,b,c)
+  local updb = self.dists.item and self.versions.item and self.qas.item and true or false
+  self:updateView("b1","visible",updb)
+  self:updateView("info","text",str)
 end
 
 function QuickApp:getQA(cb)
@@ -183,28 +198,28 @@ function QuickApp:getQA(cb)
 end
 
 function QuickApp:update()
-  self:debug("Update")
+  self:log("Update")
   if not self.qas.item then
-    return self:error("Please select QA to update")
+    return self:logErr("Please select QA to update")
   end
   self:getQA(function(ok,res)
-    if not ok then return self:error(res) end
+    if not ok then return self:logErr(res) end
     local eid = self.qas.item.id
     local version = self.versions.item
-
+    
     local function exclude(name)
       for _,p in ipairs(version.exclude or {}) do
         local pp = p:match("^p:(.*)$")
         if pp then return name:match(pp) else return name == p end
       end 
     end
-
+    
     local function equalContent(f)
       local res,code = api.get(fmt("/quickApp/%s/files/%s",eid,f.name))
       if code > 202 then return false end
       return res.content == f.content
     end
-
+    
     local fqa = res
     
     local nprops = fqa.initialProperties
@@ -282,14 +297,14 @@ end
 
 function QuickApp:install()
   self:getQA(function(ok,res)
-    if not ok then return self:error(res) end
+    if not ok then return self:logErr(res) end
     local fqa = res
     local res,code = api.post("/quickApp/",fqa)
     if code < 203 then
       self:updateQAlist()
       return self:log("Install success")
     end
-    self:error("Install failed",code)
+    self:LogErr("Install failed %s",tostring(code))
   end)
 end
 
@@ -298,6 +313,19 @@ function QuickApp:refresh()
   self:updateQAlist()
 end
 
+local ref = nil
 function QuickApp:log(fmt,...)
-  self:debug(fmt:format(...))
+  local str = fmt:format(...)
+  self:updateView("log","text",str)
+  self:debug(str)
+  if ref then clearTimeout(ref) end
+  ref = setTimeout(function() self:updateView("log","text","") end,5000)
+end
+
+function QuickApp:logErr(fmt,...)
+  local str = fmt:format(...)
+  self:updateView("log","text","Err:"..str)
+  self:error(str)
+  if ref then clearTimeout(ref) end
+  ref = setTimeout(function() self:updateView("log","text","") end,5000)
 end
