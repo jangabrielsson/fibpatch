@@ -12,7 +12,7 @@ if require and not QuickApp then require('hc3emu') end
 --%%u={select='qaVersion', text='Version', onToggled='qaVersion', options={}}
 --%%u={select='qaUpdate', text='Update', onToggled='qaUpdate', options={}}
 --%%u={label='info',text=''}
---%%u={{button='b1', text='Update', onReleased='qaUpdate'},{button='b2', text='Install', onReleased='qaInstall'},{button='b3', text='Refresh', onReleased='refresh'}}
+--%%u={{button='b1', text='Update', onReleased='update'},{button='b2', text='Install', onReleased='install'},{button='b3', text='Refresh', onReleased='refresh'}}
 
 local test = true
 local VERSION = "0.1.0"
@@ -21,6 +21,8 @@ local fmt = string.format
 local EVENT = fibaro.EVENT or {}
 fibaro.EVENT = EVENT
 QAs,Versions,Dists = QAs,Versions,Dists
+
+local function ERRORF(fmt,...) fibaro.error(__TAG,fmt:format(...)) end
 
 local function trim(s)
   return s:match("(.+)%.fqa$") or s
@@ -72,11 +74,22 @@ function QuickApp:onInit()
   self:updateQADir()
   self:updateQAlist()
   
+  -- self:testQA("install","QA_A.fqa","1.0",nil,2000)
+  -- self:testQA("install","QA_A.fqa","1.1",nil,4000)
+  
+  self:testQA("update","QA_A.fqa","1.0",5002,2000)
+end
+
+function QuickApp:testQA(cmd,name,version,id,time) -- for testing in emulator
+  time = time or 4000
   setTimeout(function() 
-    self.dists:select("QA_A.fqa")
-    self.versions:select("10")
-    self:qaInstall()
-  end,1000)
+    self.dists:select(name)
+    self.versions:select(version)
+    if cmd == "update" then 
+      self.qas:select(id)
+      self:update()
+    elseif cmd == "install" then self:install() end
+  end,time)
 end
 
 local dir = {}
@@ -143,26 +156,77 @@ function QuickApp:getQA(cb)
 end
 
 function QuickApp:update()
+  self:debug("Update")
   if not self.qas.item then
     return self:error("Please select QA to update")
   end
   self:getQA(function(ok,res)
-    local fqa = json.decode(res)
-    local files = fqa.files
-    local props = fqa.initialProperties
-    local ifs = fqa.initialInterfaces
+    if not ok then return self:error(res) end
+    local eid = self.qas.item.id
+    local fqa = res
+    
+    local nprops = fqa.initialProperties
+    local nifs = fqa.initialInterfaces -- do this in QA...
+    
+    -- update files
+    local efile = api.get(fmt("/quickApp/%s/files",eid))
+    local nfile = fqa.files
+    local emap,nmap = {},{}
+    local newFiles = {}
+    local existingFiles = {}
+    local deletedFiles = {}
+    
+    for _,f in ipairs(nfile) do nmap[f.name] = f end
+    for _,f in ipairs(efile) do emap[f.name] = f end
+    for _,f in ipairs(nfile) do
+      if not emap[f.name] then newFiles[#newFiles+1] = f 
+      else existingFiles[#existingFiles+1] = f end
+    end
+    for _,f in ipairs(efile) do 
+      if not nmap[f.name] then deletedFiles[#deletedFiles+1] = f end
+    end
+    
+    for _,f in ipairs(newFiles) do
+      local res,code = api.post("/quickApp/"..eid.."/files",f)
+      if code > 201 then ERRORF("Failed to create file %s",f.name) end
+    end
+    
+    local res,code = api.put("/quickApp/"..eid.."/files",existingFiles)
+    if code > 202 then 
+      ERRORF("Failed to update files for QuickApp %d",eid)
+    end
+    
+    for _,f in ipairs(deletedFiles) do
+      local _,code = api.delete("/quickApp/"..eid.."/files/"..f.name)
+      if code > 202 then ERRORF("Failed to delete file %s",f.name) end
+    end
+    
+    -- Update UI
+    if UI then
+      local viewLayout,uiView,uiCallbacks = nprops.viewLayout,nprops.uiView,nprops.uiCallbacks
+      local _,code = api.put("/devices/"..eid,{
+        properties = {
+          viewLayout = viewLayout,
+          uiView = uiView,
+          uiCallbacks = uiCallbacks
+        }
+      })
+      if code > 202 then 
+        ERRORF("Failed to update UI for QuickApp %d",eid)
+      end
+    end
   end)
 end
 
-function QuickApp:qaInstall()
+function QuickApp:install()
   self:getQA(function(ok,res)
+    if not ok then return self:error(res) end
     local fqa = res
     local res,code = api.post("/quickApp/",fqa)
     if code < 203 then
-      self:log("Install success")
-      return
+      return self:log("Install success")
     end
-    self:error("Install failed")
+    self:error("Install failed",code)
   end)
 end
 

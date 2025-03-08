@@ -114,7 +114,7 @@ function Selectable:update(list)
     self.map[key] = item
     table.insert(options,{text=name,type='option',value=key})
   end
-  print("Updated",self.id,#options)
+  --print("Updated",self.id,#options)
   self:_updateList("options",options)
 end
 function Selectable:select(key)
