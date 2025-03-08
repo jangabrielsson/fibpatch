@@ -163,6 +163,12 @@ function QuickApp:update()
   self:getQA(function(ok,res)
     if not ok then return self:error(res) end
     local eid = self.qas.item.id
+    local version = self.versions.item.version
+    local function exclude(name)
+      for _,p in ipairs(version.exlude or {}) do
+        if name == p then return true end
+      end 
+    end
     local fqa = res
     
     local nprops = fqa.initialProperties
