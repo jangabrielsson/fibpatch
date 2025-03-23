@@ -38,9 +38,9 @@ if test then fibaro.hc3emu.installLocal = true end
 local QAS = {}
 
 class "Dists"(Selectable)
-function Dists:__init(qa) Selectable.__init(self,qa,"qaSelect","qaSelect") end
-function Dists:name(item) return trim(item.name) end
-function Dists:key(item) return item.name end
+function Dists:__init(qa) Selectable.__init(self,qa,"qaSelect") end
+function Dists:text(item) return trim(item.name) end
+function Dists:value(item) return item.name end
 function Dists:sort(a,b) return a.name < b.name end
 function Dists:selected(item)
   DistUID = item.info.uid
@@ -50,16 +50,16 @@ function Dists:selected(item)
 end
 
 class "Versions"(Selectable)
-function Versions:__init(qa) Selectable.__init(self,qa,"qaVersion","qaVersion") end
-function Versions:name(item) return fmt("%s, %s",item.version,item.description) end
-function Versions:key(item) return item.version end
+function Versions:__init(qa) Selectable.__init(self,qa,"qaVersion") end
+function Versions:text(item) return fmt("%s, %s",item.version,item.description) end
+function Versions:value(item) return item.version end
 function Versions:sort(a,b) return a.version < b.version end
 function Versions:selected(item) self.qa:updateInfo() end
 
 class "QAs"(Selectable)
-function QAs:__init(qa) Selectable.__init(self,qa,"qaUpdate","qaUpdate") end
-function QAs:name(item) return fmt("%s: %s",item.id,item.name) end
-function QAs:key(item) return item.id end
+function QAs:__init(qa) Selectable.__init(self,qa,"qaUpdate") end
+function QAs:text(item) return fmt("%s: %s",item.id,item.name) end
+function QAs:value(item) return item.id end
 function QAs:sort(a,b) return a.name < b.name end
 function QAs:filter(item) return item.properties.quickAppUuid == DistUID end
 function QAs:selected(item) self.qa:updateInfo() end
@@ -324,8 +324,5 @@ end
 
 function QuickApp:logErr(fmt,...)
   local str = fmt:format(...)
-  self:updateView("log","text","Err:"..str)
-  self:error(str)
-  if ref then clearTimeout(ref) end
-  ref = setTimeout(function() self:updateView("log","text","") end,5000)
+  self:log("Err:%s",str)
 end

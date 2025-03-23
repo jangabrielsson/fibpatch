@@ -4,5 +4,5 @@ QA_DIR = {
 }
 
 QA_LIBRARIES = {
-  -- "htp://host/path/lib.json"
+  "https://raw.githubusercontent.com/jangabrielsson/hc3emu/refs/heads/main/jgabsQAs.json"
 }

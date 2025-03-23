@@ -92,7 +92,15 @@ end
 local function mkKey(item) return tostring(item):gsub("[^%w]","") end
 Selectable = Selectable
 class 'Selectable'
-function Selectable:__init(qa,id,fun)
+function Selectable:__init(qa,id)
+  local fun = nil
+  assert(type(qa)=='userdata',"First argument must be the QuickApp (self)")
+  assert(self.text,"Selectable:text(item) not defined")
+  assert(self.value,"Selectable:value(item) not defined")
+  for _,c in ipairs(qa.properties.uiCallbacks or {}) do
+    if c.name==id then fun = c.callback break end
+  end
+  assert(fun,"Selectable "..tostring(id).." not found in uiCallbacks")
   self.id = id
   self.qa = qa
   self.fun = fun
@@ -100,8 +108,12 @@ function Selectable:__init(qa,id,fun)
     if self.map == nil then
       return fibaro.warning(__TAG,"Selectable "..self.id.." not initialized")
     end
-    self.value = tostring(event.values[1])
-    self.item = self.map[self.value]
+    self.key = tostring(event.values[1])
+    self.item = self.map[self.key]
+    if self.item == nil then
+      return fibaro.warning(__TAG,"Selecable: Invalid value: "..self.key)
+    end
+    self._value = self:value(self.item)
     if self.selected then
       self:selected(self.item)
     end
@@ -122,22 +134,25 @@ function Selectable:update(list)
   self.map = {}
   local options = {}
   for _,item in ipairs(self.list) do
-    local key = mkKey(self:key(item)) -- corrected parenthesis
-    local name = self:name(item)
-    self.map[key] = item
-    table.insert(options,{text=name,type='option',value=key})
+    local value = mkKey(self:value(item))
+    local name = self:text(item)
+    self.map[value] = item
+    table.insert(options,{text=name,type='option',value=value})
   end
-  --print("Updated",self.id,#options)
+  self.options = options
+  --Get around bug that don't update the list if empty
+  if next(options) == nil then options={{text="",type="option",value=""}} end
   self:_updateList("options",options)
+  self:_updateList("selectedItem","")
 end
-function Selectable:select(key)
-  key = mkKey(key)
-  if not self.map[key] then 
-    return fibaro.warning(__TAG,"Invalid key: "..key)
+function Selectable:select(value)
+  value = mkKey(value)
+  if not self.map[value] then 
+    return fibaro.warning(__TAG,"Invalid value: "..value)
   end
-  self:_updateList("selectedItem",key)
-  self.qa[self.fun](self.qa,{values={key}})
-  self:selected(self.map[key])
+  self:_updateList("selectedItem",value)
+  self.qa[self.fun](self.qa,{values={value}})
+  self:selected(self.map[value])
 end
 
 function Selectable:_updateList(prop,value)
@@ -146,8 +161,8 @@ end
 
 --[[
 function Selectable:selected(value) ...end
-function Selectable:key(item) return item.key end
-function Selectable:name(item) return item.name end
+function Selectable:value(item) return item.<value> end
+function Selectable:text(item) return item.<text> end
 function Selectable:sort(a,b) return a.name < b.name end
-Selectable.value
+Selectable.item
 --]]
